@@ -6,18 +6,29 @@ from torch.optim.lr_scheduler import OneCycleLR
 
 
 class RandomNetsModel(pytorch_lightning.LightningModule):
-    def __init__(self):
+    def __init__(
+        self,
+        mask_thr: float = 0.5,
+        dim: int = 1024,
+        in_dim: int = 4096,
+        n_nns: int = 25,
+        learning_rate: float = 1e-3,
+        max_lr: float = 1e-3,
+        dropout: float = 0.25,
+        n_hidden_layers: int = 2,
+        max_epochs: int = 10,
+    ):
         super().__init__()
 
-        self.mask_thr = 0.5
-        self.dim = 1024
-        self.in_dim = 4096
-        self.n_nns = 25
-        self.learning_rate = 1e-3
-        self.max_lr = 1e-3
-        self.dropout = 0.25
-        self.n_hidden_layers = 2
-        self.max_epochs = 10
+        self.mask_thr = mask_thr
+        self.dim = dim
+        self.in_dim = in_dim
+        self.n_nns = n_nns
+        self.learning_rate = learning_rate
+        self.max_lr = max_lr
+        self.dropout = dropout
+        self.n_hidden_layers = n_hidden_layers
+        self.max_epochs = max_epochs
 
         self.create_input_mask()
         self.create_layers()
@@ -69,20 +80,13 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         y_hats = self.predict_nn(ff_o)
         return y_hats.squeeze()  # Dims are then samples, n_nns
 
-    def get_loss(self, batch, revert_mask=False):
+    def get_loss(self, batch):
         fp, y, mask = batch
-
-        if revert_mask:
-            mask = 1 - mask
 
         # Add n_nns dim and repeat y five times
         ys = torch.unsqueeze(y, 1).repeat(1, self.n_nns)
 
         y_hats = self.forward(fp)
-
-        # These lines will come in handy for the sample masking
-        # mse_loss = torch.nn.functional.mse_loss(y_hat, y, reduce=False)
-        # weighted_loss = mse_loss * weights
 
         loss = torch.nn.functional.mse_loss(y_hats, ys, reduce=False)
         loss = (
@@ -99,7 +103,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
     def validation_step(self, batch, batch_idx):
         # TODO, double check the masking and eval score, its way lower than with a dedicated validation set
         self.eval()
-        loss = self.get_loss(batch, revert_mask=True)
+        loss = self.get_loss(batch)
         self.log("val_mse_loss", loss)
         return loss
 

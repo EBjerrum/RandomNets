@@ -11,62 +11,79 @@ from sklearn.model_selection import train_test_split
 
 
 class FpsDataset(Dataset):
-    def __init__(self, data):
+    def __init__(self, data, invert_mask=False):
         self.data = data
+        self.invert_mask = invert_mask
+        self.target_label = "pXC50"
+        self.features_label = "fps"
+        self.sample_mask_label = "sample_mask"
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        fp1 = torch.tensor(self.data.fps.iloc[idx], dtype=torch.float)
-        y1 = torch.tensor(self.data.pXC50.iloc[idx], dtype=torch.float)
-        sample_mask = torch.tensor(self.data.sample_mask.iloc[idx], dtype=torch.float)
+        fp1 = torch.tensor(self.data[self.features_label].iloc[idx], dtype=torch.float)
+        y1 = torch.tensor(self.data[self.target_label].iloc[idx], dtype=torch.float)
+        sample_mask = torch.tensor(
+            self.data[self.sample_mask_label].iloc[idx], dtype=torch.float
+        )
+
+        if self.invert_mask:
+            sample_mask = 1 - sample_mask
 
         return fp1, y1, sample_mask
 
 
 class FpsDatamodule(pytorch_lightning.LightningDataModule):
-    def __init__(self, batch_size, n_nns=25, sample_mask_thr=0.5):
+    def __init__(
+        self,
+        batch_size,
+        csv_file="SLC6A4_active_excape_export.csv",
+        n_nns=25,
+        sample_mask_thr=0.5,
+        dedicated_val=False,
+        scikit_mol_transformer=MorganFingerprintTransformer(nBits=4096, radius=2),
+    ):
         super().__init__()
+        self.batch_size = batch_size
         self.n_nns = n_nns
         self.sample_mask_thr = sample_mask_thr
-        self.batch_size = batch_size
-        self.csv_file = "SLC6A4_active_excape_export.csv"
-
-    def ensure_data(self):
-        if not os.path.exists(self.csv_file):
-            import urllib.request
-
-            url = "https://ndownloader.figshare.com/files/25747817"
-            urllib.request.urlretrieve(url, self.csv_file)
+        self.csv_file = csv_file
+        self.dedicated_val = dedicated_val
+        self.skmol_trf = scikit_mol_transformer
+        self.val_sample_size = 1000
 
     def setup(self, stage):
         if hasattr(self, "data"):
             return
-        self.ensure_data()
+        assert os.path.exists(self.csv_file), f"CSV file {self.csv_file} not found"
         self.data = pd.read_csv(self.csv_file)
 
         PandasTools.AddMoleculeColumnToFrame(self.data, smilesCol="SMILES")
-        print(
-            f"{self.data.ROMol.isna().sum()} out of {len(self.data)} SMILES failed in conversion"
-        )
-
-        trf = MorganFingerprintTransformer(nBits=4096, radius=2)
-        fps = trf.transform(self.data.ROMol)
+        mol_conv_errors = self.data.ROMol.isna().sum()
+        assert (
+            mol_conv_errors == 0
+        ), f"{mol_conv_errors} out of {len(self.data)} SMILES failed in conversion"
+        fps = self.skmol_trf.transform(self.data.ROMol)
         self.data["fps"] = [arr for arr in fps]
 
-        # prepare model_mask
+        # prepare model_mask, TODO: is there another way to prepare the mask? it preempts knowledge about the number in the ensemble, which is the models responsibility!
         self.data["sample_mask"] = [
             np.random.random(self.n_nns) > self.sample_mask_thr
             for i in range(len(self.data))
         ]
 
-        # Initialize Weights
+        # dataset splits
         self.data_train, self.data_test = train_test_split(self.data, random_state=0)
 
-        # self.data_train, self.data_val = train_test_split(data_train, random_state=0)
-        # With mask reversal, we can get the cross_val score
-        self.data_val = self.data_train.sample(1000, random_state=0)
+        if self.dedicated_val:
+            self.data_train, self.data_val = train_test_split(
+                self.data_train, random_state=0
+            )
+        else:
+            # With sample mask reversal, we can get the cross_val loss
+
+            self.data_val = self.data_train.sample(self.val_sample_size, random_state=0)
 
     def train_dataloader(self, shuffle=True):
         dataset = FpsDataset(self.data_train)
@@ -75,7 +92,7 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         )
 
     def val_dataloader(self):
-        dataset = FpsDataset(self.data_val)
+        dataset = FpsDataset(self.data_val, invert_mask=True)
         return DataLoader(
             dataset, batch_size=self.batch_size, num_workers=16, shuffle=False
         )
@@ -85,3 +102,7 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         return DataLoader(
             dataset, batch_size=self.batch_size, num_workers=16, shuffle=False
         )
+
+    def mols_to_fp(self, mol_list):
+        fps = self.skmol_trf.transform(mol_list)
+        return torch.tensor(fps, dtype=torch.float)

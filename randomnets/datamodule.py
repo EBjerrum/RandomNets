@@ -11,12 +11,19 @@ from sklearn.model_selection import train_test_split
 
 
 class FpsDataset(Dataset):
-    def __init__(self, data, invert_mask=False):
+    def __init__(
+        self,
+        data,
+        target_label="pXC50",
+        feature_label="fps",
+        sample_mask_label="sample_mask",
+        invert_mask=False,
+    ):
         self.data = data
+        self.target_label = target_label
+        self.features_label = feature_label
+        self.sample_mask_label = sample_mask_label
         self.invert_mask = invert_mask
-        self.target_label = "pXC50"
-        self.features_label = "fps"
-        self.sample_mask_label = "sample_mask"
 
     def __len__(self):
         return len(self.data)
@@ -52,6 +59,9 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         self.dedicated_val = dedicated_val
         self.skmol_trf = scikit_mol_transformer
         self.val_sample_size = 1000
+        self.target_label = "pXC50"
+        self.features_label = "fps"
+        self.sample_mask_label = "sample_mask"
 
     def setup(self, stage):
         if hasattr(self, "data"):
@@ -82,23 +92,38 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             )
         else:
             # With sample mask reversal, we can get the cross_val loss
-
             self.data_val = self.data_train.sample(self.val_sample_size, random_state=0)
 
     def train_dataloader(self, shuffle=True):
-        dataset = FpsDataset(self.data_train)
+        dataset = FpsDataset(
+            self.data_train,
+            feature_label=self.features_label,
+            target_label=self.target_label,
+            sample_mask_label=self.sample_mask_label,
+        )
         return DataLoader(
             dataset, batch_size=self.batch_size, num_workers=16, shuffle=shuffle
         )
 
     def val_dataloader(self):
-        dataset = FpsDataset(self.data_val, invert_mask=True)
+        dataset = FpsDataset(
+            self.data_val,
+            feature_label=self.features_label,
+            target_label=self.target_label,
+            sample_mask_label=self.sample_mask_label,
+            invert_mask=True,
+        )
         return DataLoader(
             dataset, batch_size=self.batch_size, num_workers=16, shuffle=False
         )
 
     def test_dataloader(self):
-        dataset = FpsDataset(self.data_test)
+        dataset = FpsDataset(
+            self.data_test,
+            feature_label=self.features_label,
+            target_label=self.target_label,
+            sample_mask_label=self.sample_mask_label,
+        )
         return DataLoader(
             dataset, batch_size=self.batch_size, num_workers=16, shuffle=False
         )

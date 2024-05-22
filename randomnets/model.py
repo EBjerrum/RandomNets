@@ -19,12 +19,13 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         max_epochs: int = 10,
     ):
         super().__init__()
+        self.save_hyperparameters()
 
+        # TODO, substitute with calls to hparams
         self.mask_thr = mask_thr
         self.dim = dim
         self.in_dim = in_dim
         self.n_nns = n_nns
-        self.learning_rate = learning_rate
         self.max_lr = max_lr
         self.dropout = dropout
         self.n_hidden_layers = n_hidden_layers
@@ -106,10 +107,6 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         loss = self.get_loss(batch)
         self.log("val_mse_loss", loss)
         return loss
-
-    # def configure_optimizers(self):
-    #     optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
-    #     return optimizer
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters())

@@ -1,0 +1,23 @@
+[project]
+name = "randomnets"
+version = "0.0.1"
+description = "Description"
+authors = [
+  {name = "Esben Jannik Bjerrum", email="esbenbjerrum+cheminformania@gmail.com"}
+]
+
+requires-python = ">= 3.8"
+readme = "README.md"
+license = {file = "LICENSE"}
+dependencies = [
+    "pandas",
+    "scikit_mol",
+    "pytorch-lightning",
+    "scikit-learn"
+    ]
+
+[build-system]
+requires = ["setuptools>=61.2", "wheel"]
+
+[tool.setuptools.packages.find]
+exclude = ["notebooks"]

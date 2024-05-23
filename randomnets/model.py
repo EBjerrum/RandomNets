@@ -89,7 +89,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
 
         y_hats = self.forward(fp)
 
-        loss = torch.nn.functional.mse_loss(y_hats, ys, reduce=False)
+        loss = torch.nn.functional.mse_loss(y_hats, ys, reduction="none")
         loss = (
             (loss * mask).sum() / mask.sum()
         )  # Normalize so that only the one that are not masked are used in calculation!

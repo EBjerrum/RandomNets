@@ -106,12 +106,17 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         )
 
     def val_dataloader(self):
+        if self.dedicated_val:
+            invert_mask = False
+        else:
+            invert_mask = True
+
         dataset = FpsDataset(
             self.data_val,
             feature_label=self.features_label,
             target_label=self.target_label,
             sample_mask_label=self.sample_mask_label,
-            invert_mask=True,
+            invert_mask=invert_mask,
         )
         return DataLoader(
             dataset, batch_size=self.batch_size, num_workers=16, shuffle=False

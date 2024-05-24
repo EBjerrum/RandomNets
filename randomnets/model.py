@@ -85,27 +85,43 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         fp, y, mask = batch
 
         # Add n_nns dim and repeat y five times
-        ys = torch.unsqueeze(y, 1).repeat(1, self.n_nns)
+        ys = torch.unsqueeze(y, 1).repeat(1, self.n_nns).detach()
 
         y_hats = self.forward(fp)
 
-        loss = torch.nn.functional.mse_loss(y_hats, ys, reduction="none")
-        loss = (
-            (loss * mask).sum() / mask.sum()
-        )  # Normalize so that only the one that are not masked are used in calculation!
-        return loss
+        loss = torch.nn.functional.mse_loss(y_hats[mask.bool()], ys[mask.bool()])
+
+        # loss = torch.nn.functional.mse_loss(y_hats, ys, reduction="none")
+        # loss = (
+        #     (loss * mask).sum() / mask.sum()
+        # )  # Normalize so that only the one that are not masked are used in calculation!
+
+        y_hat_ensemble = (y_hats * mask).sum(axis=1) / mask.sum(axis=1).detach()
+        ensemble_loss = torch.nn.functional.mse_loss(y_hat_ensemble, y).detach()
+
+        return loss, ensemble_loss
 
     def training_step(self, batch, batch_idx):
         self.train()
-        loss = self.get_loss(batch)
+        loss, ensemble_loss = self.get_loss(batch)
         self.log("train_mse_loss", loss)
+        self.log("train_mse_ensemble_loss", ensemble_loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         # TODO, double check the masking and eval score, its way lower than with a dedicated validation set
         self.eval()
-        loss = self.get_loss(batch)
+        loss, ensemble_loss = self.get_loss(batch)
         self.log("val_mse_loss", loss)
+        self.log("val_mse_ensemble_loss", ensemble_loss)
+        self.log("hp_metric", ensemble_loss)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        self.eval()
+        loss, ensemble_loss = self.get_loss(batch)
+        self.log("mse_loss", loss)
+        self.log("mse_ensemble_loss", ensemble_loss)
         return loss
 
     def configure_optimizers(self):

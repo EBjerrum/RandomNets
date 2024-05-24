@@ -90,6 +90,9 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             self.data_train, self.data_val = train_test_split(
                 self.data_train, random_state=0
             )
+            self.data_val["sample_mask"] = [
+                np.random.random(self.n_nns) >= 0.0 for i in range(len(self.data_val))
+            ]
         else:
             # With sample mask reversal, we can get the cross_val loss
             self.data_val = self.data_train.sample(self.val_sample_size, random_state=0)
@@ -110,6 +113,7 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             invert_mask = False
         else:
             invert_mask = True
+            # print("Inverting Mask on dataset")
 
         dataset = FpsDataset(
             self.data_val,

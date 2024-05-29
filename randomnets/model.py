@@ -140,7 +140,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
             steps_per_epoch=len(
                 dataloader
             ),  # We call train_dataloader, just to get the length, is this necessary?
-            pct_start=0.3,
+            pct_start=0.1,
             anneal_strategy="cos",
             cycle_momentum=True,
             base_momentum=0.85,

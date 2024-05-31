@@ -30,7 +30,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.dropout = dropout
         self.n_hidden_layers = n_hidden_layers
         self.max_epochs = max_epochs
-        self.id_embedding_dim = 8
+        self.id_embedding_dim = 0
 
         self.create_input_mask()
         self.create_layers()
@@ -105,11 +105,11 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         )  # -> samples, fp_size, n_nns_sel
         fp_masked = fp_reshaped * fp_mask
 
-        emb_id = self.id_embedding(sample_mask).transpose(1, 2)
+        if self.id_embedding_dim:  # Set to zero to inactivate
+            emb_id = self.id_embedding(sample_mask).transpose(1, 2)
+            fp_masked = torch.concat((fp_masked, emb_id), dim=1)
 
-        fp_masked_n_id = torch.concat((fp_masked, emb_id), dim=1)
-
-        emb_o = self.embedding(fp_masked_n_id)
+        emb_o = self.embedding(fp_masked)
 
         ff_o = self.FF(emb_o)
         y_hats = self.predict_nn(ff_o)
@@ -140,7 +140,6 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.train()
         loss, ensemble_loss, ensemble_std = self.get_loss(batch)
         self.log("train_mse_loss", loss)
-        # self.log("train_mse_ensemble_loss", ensemble_loss)
         return loss
 
     def validation_step(self, batch, batch_idx):

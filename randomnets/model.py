@@ -17,6 +17,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         dropout: float = 0.25,
         n_hidden_layers: int = 2,
         max_epochs: int = 10,
+        id_embedding_dim=8,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -30,7 +31,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.dropout = dropout
         self.n_hidden_layers = n_hidden_layers
         self.max_epochs = max_epochs
-        self.id_embedding_dim = 0
+        self.id_embedding_dim = id_embedding_dim
 
         self.create_input_mask()
         self.create_layers()

@@ -32,11 +32,12 @@ class FpsDataset(Dataset):
         fp1 = torch.tensor(self.data[self.features_label].iloc[idx], dtype=torch.float)
         y1 = torch.tensor(self.data[self.target_label].iloc[idx], dtype=torch.float)
         sample_mask = torch.tensor(
-            self.data[self.sample_mask_label].iloc[idx], dtype=torch.float
+            self.data[self.sample_mask_label].iloc[idx],
+            dtype=torch.int64,  # int64 expected by gather
         )
 
-        if self.invert_mask:
-            sample_mask = 1 - sample_mask
+        # if self.invert_mask:
+        #     sample_mask = 1 - sample_mask
 
         return fp1, y1, sample_mask
 
@@ -54,7 +55,7 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         super().__init__()
         self.batch_size = batch_size
         self.n_nns = n_nns
-        self.sample_mask_thr = sample_mask_thr
+        self.sample_mask_fraction = sample_mask_thr
         self.csv_file = csv_file
         self.dedicated_val = dedicated_val
         self.skmol_trf = scikit_mol_transformer
@@ -78,8 +79,18 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         self.data["fps"] = [arr for arr in fps]
 
         # prepare model_mask, TODO: is there another way to prepare the mask? it preempts knowledge about the number in the ensemble, which is the models responsibility!
+        # self.data["sample_mask"] = [
+        #     np.random.random(self.n_nns) > self.sample_mask_thr
+        #     for i in range(len(self.data))
+        # ]
+
+        # This is the indices of the ensemble ids to associate with each sample
         self.data["sample_mask"] = [
-            np.random.random(self.n_nns) > self.sample_mask_thr
+            np.random.choice(
+                range(self.n_nns),
+                int(self.n_nns * (1 - self.sample_mask_fraction)),
+                replace=False,
+            )
             for i in range(len(self.data))
         ]
 
@@ -90,9 +101,9 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             self.data_train, self.data_val = train_test_split(
                 self.data_train, random_state=0
             )
-            self.data_val["sample_mask"] = [
-                np.random.random(self.n_nns) >= 0.0 for i in range(len(self.data_val))
-            ]
+            # self.data_val["sample_mask"] = [
+            #     np.random.random(self.n_nns) >= 0.0 for i in range(len(self.data_val))
+            # ]
         else:
             # With sample mask reversal, we can get the cross_val loss
             self.data_val = self.data_train.sample(self.val_sample_size, random_state=0)

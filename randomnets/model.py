@@ -30,6 +30,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.dropout = dropout
         self.n_hidden_layers = n_hidden_layers
         self.max_epochs = max_epochs
+        self.id_embedding_dim = 8
 
         self.create_input_mask()
         self.create_layers()
@@ -51,10 +52,18 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.dropout_fn = nn.Dropout(self.dropout)
         self.activation_fn = nn.LeakyReLU()  # nn.ReLU()
 
+        self.id_embedding = nn.Embedding(
+            num_embeddings=self.n_nns, embedding_dim=self.id_embedding_dim
+        )
+
         # Conv1D is (N,Cin,L), N is a batch size, C denotes a number of channels, L is a length of signal sequence.
         # So if FP is channels, hidden is Cout, L is n_nns, and stride and kernel_size should be 1.
         self.embedding_nn = nn.Conv1d(
-            self.in_dim, self.dim, stride=1, kernel_size=1, padding=0
+            self.in_dim + self.id_embedding_dim,
+            self.dim,
+            stride=1,
+            kernel_size=1,
+            padding=0,
         )
         self.embedding = nn.Sequential(
             self.embedding_nn, self.activation_fn, self.dropout_fn
@@ -85,8 +94,23 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
 
         return fp_mask_gathered
 
-    def forward(self, masked_fp):
-        emb_o = self.embedding(masked_fp)
+    def forward(
+        self, fp, sample_mask
+    ):  # TODO make a default to use ALL input masks, if none provided
+        fp_mask = self.get_fp_masks(sample_mask)
+
+        n_ensemble_sel = sample_mask.shape[1]
+        fp_reshaped = fp.unsqueeze(2).expand(
+            -1, -1, n_ensemble_sel
+        )  # -> samples, fp_size, n_nns_sel
+        fp_masked = fp_reshaped * fp_mask
+
+        emb_id = self.id_embedding(sample_mask).transpose(1, 2)
+
+        fp_masked_n_id = torch.concat((fp_masked, emb_id), dim=1)
+
+        emb_o = self.embedding(fp_masked_n_id)
+
         ff_o = self.FF(emb_o)
         y_hats = self.predict_nn(ff_o)
         return y_hats.squeeze()  # Dims are then samples, n_nns_sel
@@ -94,18 +118,10 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
     def get_loss(self, batch):
         fp, y, sample_mask = batch
 
-        n_ensemble_sel = sample_mask.shape[1]
-
-        fp_mask = self.get_fp_masks(sample_mask)
-        fp_reshaped = fp.unsqueeze(2).expand(
-            -1, -1, n_ensemble_sel
-        )  # -> samples, fp_size, n_nns_sel
-        fp_masked = fp_reshaped * fp_mask
-
         # Add n_nns dim and repeat y n_nns_sel times
-        ys = torch.unsqueeze(y, 1).expand(-1, n_ensemble_sel).detach()
+        ys = torch.unsqueeze(y, 1).expand(-1, sample_mask.shape[1]).detach()
 
-        y_hats = self.forward(fp_masked)
+        y_hats = self.forward(fp, sample_mask)
 
         loss = torch.nn.functional.mse_loss(y_hats, ys)
 
@@ -114,32 +130,34 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         #     (loss * mask).sum() / mask.sum()
         # )  # Normalize so that only the one that are not masked are used in calculation!
 
-        # y_hat_ensemble = (y_hats * mask).sum(axis=1) / mask.sum(axis=1).detach()
-        # ensemble_loss = torch.nn.functional.mse_loss(y_hat_ensemble, y).detach()
+        y_hat_ensemble = (y_hats).mean(axis=1)
+        ensemble_loss = torch.nn.functional.mse_loss(y_hat_ensemble, y).detach()
+        ensemble_std = (y_hats).std(axis=1).mean().detach()
 
-        return loss  # , ensemble_loss
+        return loss, ensemble_loss, ensemble_std
 
     def training_step(self, batch, batch_idx):
         self.train()
-        loss = self.get_loss(batch)
+        loss, ensemble_loss, ensemble_std = self.get_loss(batch)
         self.log("train_mse_loss", loss)
         # self.log("train_mse_ensemble_loss", ensemble_loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        # TODO, double check the masking and eval score, its way lower than with a dedicated validation set
         self.eval()
-        loss = self.get_loss(batch)
+        loss, ensemble_loss, ensemble_std = self.get_loss(batch)
         self.log("val_mse_loss", loss)
-        # self.log("val_mse_ensemble_loss", ensemble_loss)
-        self.log("hp_metric", loss)
+        self.log("val_mse_ensemble_loss", ensemble_loss)
+        self.log("val_mse_ensemble_std", ensemble_std)
+        self.log("hp_metric", ensemble_loss)
         return loss
 
     def test_step(self, batch, batch_idx):
         self.eval()
-        loss, ensemble_loss = self.get_loss(batch)
+        loss, ensemble_loss, ensemble_std = self.get_loss(batch)
         self.log("mse_loss", loss)
         self.log("mse_ensemble_loss", ensemble_loss)
+        self.log("mse_ensemble_std", ensemble_std)
         return loss
 
     def configure_optimizers(self):
@@ -173,20 +191,12 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
 
     def predict(self, fp, std=False):
         self.eval()
-        input_mask = self.input_mask
-        n_ensemble = input_mask.shape[1]
 
-        input_mask_reshaped = input_mask.unsqueeze(0).expand(
-            fp.shape[0], -1, -1
-        )  # -> samples, fp_size, n_nns
+        sample_mask = torch.tensor(
+            [range(self.n_nns)] * fp.shape[0], dtype=torch.int64
+        )  # Use Full Ensemble
 
-        fp_reshaped = fp.unsqueeze(2).expand(
-            -1, -1, n_ensemble
-        )  # -> samples, fp_size, n_nns
-
-        fp_masked = fp_reshaped * input_mask_reshaped
-
-        y_hats = self.forward(fp_masked).detach()
+        y_hats = self.forward(fp, sample_mask=sample_mask).detach()
 
         # take the mean and std along n_nns
         if std:

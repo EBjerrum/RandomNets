@@ -24,6 +24,7 @@ class FpsDataset(Dataset):
         self.features_label = feature_label
         self.sample_mask_label = sample_mask_label
         self.invert_mask = invert_mask
+        self._max_n = np.max(np.stack(self.data.sample_mask.values)) + 1
 
     def __len__(self):
         return len(self.data)
@@ -31,13 +32,15 @@ class FpsDataset(Dataset):
     def __getitem__(self, idx):
         fp1 = torch.tensor(self.data[self.features_label].iloc[idx], dtype=torch.float)
         y1 = torch.tensor(self.data[self.target_label].iloc[idx], dtype=torch.float)
-        sample_mask = torch.tensor(
-            self.data[self.sample_mask_label].iloc[idx],
-            dtype=torch.int64,  # int64 expected by gather
-        )
 
-        # if self.invert_mask:
-        #     sample_mask = 1 - sample_mask
+        sample_mask = self.data[self.sample_mask_label].iloc[idx]
+
+        full_set = set(range(self._max_n))
+
+        if self.invert_mask:
+            sample_mask = list(full_set - set(sample_mask))
+
+        sample_mask = torch.tensor(sample_mask, dtype=torch.int64) + 0
 
         return fp1, y1, sample_mask
 

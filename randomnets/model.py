@@ -8,21 +8,18 @@ from torch.optim.lr_scheduler import OneCycleLR
 class RandomNetsModel(pytorch_lightning.LightningModule):
     def __init__(
         self,
-        mask_thr: float = 0.5,
+        mask_thr: float = 0.5,  # 0 is no mask, 1.0 is drop all input!
         dim: int = 1024,
         in_dim: int = 4096,
-        n_nns: int = 25,
-        learning_rate: float = 1e-3,
+        n_nns: int = 50,
         max_lr: float = 1e-3,
         dropout: float = 0.25,
-        n_hidden_layers: int = 2,
+        n_hidden_layers: int = 1,
         max_epochs: int = 10,
-        id_embedding_dim=8,
+        id_embedding_dim=8,  # Put for zero to disable
     ):
         super().__init__()
         self.save_hyperparameters()
-
-        # TODO, substitute with calls to hparams
         self.mask_thr = mask_thr
         self.dim = dim
         self.in_dim = in_dim
@@ -47,7 +44,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         )
         self.register_buffer(
             "input_mask", random_tensor > self.mask_thr, persistent=True
-        )  # Some features may not be used at all? Can this be done more "intelligent?", e.g. chance of getting selected for next tree is related to if feature is already used?
+        )  # TODO Some features may not be used at all? Can this be done more "intelligent?", e.g. chance of getting selected for next tree is related to if feature is already used?
 
     def create_layers(self):
         self.dropout_fn = nn.Dropout(self.dropout)
@@ -114,7 +111,11 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
 
         ff_o = self.FF(emb_o)
         y_hats = self.predict_nn(ff_o)
-        return y_hats.squeeze()  # Dims are then samples, n_nns_sel
+        # print(y_hats.shape)
+        # raise Exception(y_hats.shape)
+        return y_hats.squeeze(
+            dim=1
+        )  # Dims are then samples, n_nns_sel #This fails if n_nns_sel is one!
 
     def get_loss(self, batch):
         fp, y, sample_mask = batch
@@ -180,7 +181,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
             anneal_strategy="cos",
             cycle_momentum=True,
             base_momentum=0.85,
-            max_momentum=0.95,  # These need to be tuned?
+            max_momentum=0.95,
             div_factor=1e3,
             final_div_factor=1e3,
             last_epoch=-1,

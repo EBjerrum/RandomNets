@@ -8,6 +8,9 @@ from rdkit.Chem import PandasTools
 
 from scikit_mol.fingerprints import MorganFingerprintTransformer
 from sklearn.model_selection import train_test_split
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class FpsDataset(Dataset):
@@ -66,6 +69,8 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         self.target_label = "pXC50"
         self.features_label = "fps"
         self.sample_mask_label = "sample_mask"
+        self.num_worker = 4
+        self.save_hyperparameters()
 
     def setup(self, stage):
         if hasattr(self, "data"):
@@ -75,11 +80,14 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
 
         PandasTools.AddMoleculeColumnToFrame(self.data, smilesCol="SMILES")
         mol_conv_errors = self.data.ROMol.isna().sum()
-        assert (
-            mol_conv_errors == 0
-        ), f"{mol_conv_errors} out of {len(self.data)} SMILES failed in conversion"
+        if mol_conv_errors > 0:
+            logger.warning(
+                f"{mol_conv_errors} out of {len(self.data)} SMILES failed in conversion"
+            )
+            self.data = self.data[self.data.ROMol.notna()]
+
         fps = self.skmol_trf.transform(self.data.ROMol)
-        self.data["fps"] = [arr for arr in fps]
+        self.data[self.features_label] = [arr for arr in fps]
 
         # prepare model_mask, TODO: is there another way to prepare the mask? it preempts knowledge about the number in the ensemble, which is the models responsibility!
         # self.data["sample_mask"] = [
@@ -91,7 +99,9 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         self.data["sample_mask"] = [
             np.random.choice(
                 range(self.n_nns),
-                int(self.n_nns * (1 - self.sample_mask_fraction)),
+                max(
+                    int(self.n_nns * (1 - self.sample_mask_fraction)), 1
+                ),  # Ensure always one selected
                 replace=False,
             )
             for i in range(len(self.data))
@@ -102,7 +112,7 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
 
         if self.dedicated_val:
             self.data_train, self.data_val = train_test_split(
-                self.data_train, random_state=0
+                self.data_train, test_size=self.val_sample_size, random_state=0
             )
             # self.data_val["sample_mask"] = [
             #     np.random.random(self.n_nns) >= 0.0 for i in range(len(self.data_val))
@@ -119,7 +129,11 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             sample_mask_label=self.sample_mask_label,
         )
         return DataLoader(
-            dataset, batch_size=self.batch_size, num_workers=16, shuffle=shuffle
+            dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_worker,
+            shuffle=shuffle,
+            drop_last=True,
         )
 
     def val_dataloader(self):
@@ -137,7 +151,11 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             invert_mask=invert_mask,
         )
         return DataLoader(
-            dataset, batch_size=self.batch_size, num_workers=16, shuffle=False
+            dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_worker,
+            shuffle=False,
+            drop_last=True,
         )
 
     def test_dataloader(self):
@@ -148,7 +166,11 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             sample_mask_label=self.sample_mask_label,
         )
         return DataLoader(
-            dataset, batch_size=self.batch_size, num_workers=16, shuffle=False
+            dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_worker,
+            shuffle=False,
+            drop_last=True,
         )
 
     def mols_to_fp(self, mol_list):

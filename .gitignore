@@ -161,7 +161,8 @@ cython_debug/
 
 *_nogit.*
 *sandbox*
-notebooks
+notebooks/*
 *.code-workspace
 src/_version.py
+Comparisons/*
 

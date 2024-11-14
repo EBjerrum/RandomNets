@@ -16,7 +16,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         dropout: float = 0.25,
         n_hidden_layers: int = 1,
         max_epochs: int = 10,
-        id_embedding_dim=8,  # Put for zero to disable
+        # id_embedding_dim=8,  # Put for zero to disable
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -28,7 +28,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.dropout = dropout
         self.n_hidden_layers = n_hidden_layers
         self.max_epochs = max_epochs
-        self.id_embedding_dim = id_embedding_dim
+        # self.id_embedding_dim = id_embedding_dim
 
         self.create_input_mask()
         self.create_layers()
@@ -50,14 +50,14 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.dropout_fn = nn.Dropout(self.dropout)
         self.activation_fn = nn.LeakyReLU()  # nn.ReLU()
 
-        self.id_embedding = nn.Embedding(
-            num_embeddings=self.n_nns, embedding_dim=self.id_embedding_dim
-        )
+        # self.id_embedding = nn.Embedding(
+        #     num_embeddings=self.n_nns, embedding_dim=self.id_embedding_dim
+        # )
 
         # Conv1D is (N,Cin,L), N is a batch size, C denotes a number of channels, L is a length of signal sequence.
         # So if FP is channels, hidden is Cout, L is n_nns, and stride and kernel_size should be 1.
         self.embedding_nn = nn.Conv1d(
-            self.in_dim + self.id_embedding_dim,
+            self.in_dim,  # + self.id_embedding_dim,
             self.dim,
             stride=1,
             kernel_size=1,
@@ -103,9 +103,9 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         )  # -> samples, fp_size, n_nns_sel
         fp_masked = fp_reshaped * fp_mask
 
-        if self.id_embedding_dim:  # Set to zero to inactivate
-            emb_id = self.id_embedding(sample_mask).transpose(1, 2)
-            fp_masked = torch.concat((fp_masked, emb_id), dim=1)
+        # if self.id_embedding_dim:  # Set to zero to inactivate
+        #     emb_id = self.id_embedding(sample_mask).transpose(1, 2)
+        #     fp_masked = torch.concat((fp_masked, emb_id), dim=1)
 
         emb_o = self.embedding(fp_masked)
 

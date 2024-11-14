@@ -96,7 +96,7 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         # ]
 
         # This is the indices of the ensemble ids to associate with each sample
-        self.data["sample_mask"] = [
+        self.data[self.sample_mask_label] = [
             np.random.choice(
                 range(self.n_nns),
                 max(

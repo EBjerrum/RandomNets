@@ -3,6 +3,61 @@ import pytorch_lightning
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR
+import numpy as np
+
+
+def create_balanced_mask(n_features, n_ensemble_members, mask_thr=0.5):
+    mask = torch.zeros((n_features, n_ensemble_members), dtype=bool)
+    n_features_per_member = int(n_features * (1 - mask_thr))
+
+    # Initialize pool of available indices
+    available_indices = list(range(n_features))
+
+    # For each ensemble member
+    for member in range(n_ensemble_members):
+        # Simple if we have more available than needed to sample
+        if len(available_indices) >= n_features_per_member:
+            sampled_indices = np.random.choice(
+                available_indices, size=n_features_per_member, replace=False
+            )
+            for idx in sampled_indices:
+                if idx in available_indices:
+                    available_indices.remove(idx)
+        else:
+            # Otherwise we need to sample more cleverly
+            sampled_indices = available_indices.copy()  # Empty the available indices
+            # Refill the available indices.
+            available_indices = list(range(n_features))
+
+            # Make a sample buffer to sample from
+            sample_buffer = available_indices.copy()
+
+            # Remove the already sampled indices from the sample buffer
+            for idx in sampled_indices:
+                if idx in sample_buffer:
+                    sample_buffer.remove(idx)
+
+            # Sample from the sample buffer
+            sampled_indices_fillup = np.random.choice(
+                sample_buffer,
+                size=n_features_per_member - len(sampled_indices),
+                replace=False,
+            )
+
+            # remove the fillup indices from the available indices
+            for idx in sampled_indices_fillup:
+                if idx in available_indices:
+                    available_indices.remove(idx)
+
+            # Concatenate the two sets of sampled indices
+            sampled_indices = np.concatenate([sampled_indices, sampled_indices_fillup])
+
+        # Refill if completely empty
+        if len(available_indices) == 0:
+            available_indices = list(range(n_features))
+        mask[sampled_indices, member] = True
+
+    return mask
 
 
 class RandomNetsModel(pytorch_lightning.LightningModule):
@@ -16,6 +71,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         dropout: float = 0.25,
         n_hidden_layers: int = 1,
         max_epochs: int = 10,
+        balanced_mask: bool = False,
         # id_embedding_dim=8,  # Put for zero to disable
     ):
         super().__init__()
@@ -28,6 +84,7 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.dropout = dropout
         self.n_hidden_layers = n_hidden_layers
         self.max_epochs = max_epochs
+        self.balanced_mask = balanced_mask
         # self.id_embedding_dim = id_embedding_dim
 
         self.create_input_mask()
@@ -35,15 +92,24 @@ class RandomNetsModel(pytorch_lightning.LightningModule):
         self.float()
 
     def create_input_mask(self):
-        random_tensor = torch.rand(
-            (
-                self.in_dim,
-                self.n_nns,
-            ),
-            requires_grad=False,
-        )
+        if self.balanced_mask:
+            input_mask = create_balanced_mask(self.in_dim, self.n_nns, self.mask_thr)
+        else:
+            random_tensor = torch.rand(
+                (
+                    self.in_dim,
+                    self.n_nns,
+                ),
+                requires_grad=False,
+            )
+            input_mask = (
+                random_tensor > self.mask_thr
+            )  # If mask_the is 0, all is included
         self.register_buffer(
-            "input_mask", random_tensor > self.mask_thr, persistent=True
+            # "input_mask", random_tensor > self.mask_thr, persistent=True
+            "input_mask",
+            input_mask,
+            persistent=True,
         )  # TODO Some features may not be used at all? Can this be done more "intelligent?", e.g. chance of getting selected for next tree is related to if feature is already used?
 
     def create_layers(self):

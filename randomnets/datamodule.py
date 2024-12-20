@@ -56,6 +56,7 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         n_nns=25,
         sample_mask_thr=0.5,
         dedicated_val=False,
+        val_sample_size=1000,
         scikit_mol_transformer=MorganFingerprintTransformer(nBits=4096, radius=2),
     ):
         super().__init__()
@@ -65,11 +66,12 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         self.csv_file = csv_file
         self.dedicated_val = dedicated_val
         self.skmol_trf = scikit_mol_transformer
-        self.val_sample_size = 1000
+        self.val_sample_size = val_sample_size
         self.target_label = "pXC50"
         self.features_label = "fps"
         self.sample_mask_label = "sample_mask"
         self.num_worker = 4
+
         self.save_hyperparameters()
 
     def setup(self, stage):

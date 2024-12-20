@@ -1,7 +1,7 @@
 [project]
 name = "randomnets"
-version = "0.0.1"
-description = "Description"
+version = "0.8.0"
+description = "RandomNets is an efficient, vectorized solution for creating and training implicit ensemble feed-forward neural networks, designed to enhance prediction robustness and performance. By introducing input feature masking, RandomNets generates diverse predictions within a single model architecture, making it an attractive alternative to standard feed-forward neural networks. The model is especially suited for molecular property prediction tasks and has demonstrated superior performance across a wide range of bioactivity datasets."
 authors = [
   {name = "Esben Jannik Bjerrum", email="esbenbjerrum+cheminformania@gmail.com"}
 ]

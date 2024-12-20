@@ -25,7 +25,7 @@ After installation, you can quickly set up and train a RandomNets model for your
 
 If you use RandomNets in your work, please cite the associated preprint available on ChemRxiv:
 
-Bjerrum, E. J. (2024). RandomNets Improve Neural Network Regression Performance via Implicit Ensembling. ChemRxiv. https://doi.org/10.xxxx/chemrxiv.xxxxx
+Bjerrum, E. J. (2024). RandomNets Improve Neural Network Regression Performance via Implicit Ensembling. ChemRxiv. https://doi.org/10.xxxx/chemrxiv.xxxxx (TODO Update)
 
 The full paper, including experimental results and detailed methodologies, can be accessed through the above link.
 

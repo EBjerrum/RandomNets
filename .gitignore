@@ -165,4 +165,5 @@ notebooks/*
 *.code-workspace
 src/_version.py
 Comparisons/*
+Publication/*
 

@@ -21,7 +21,7 @@ pip install git+https://github.com/EBjerrum/randomnets
 
 After installation, you can quickly set up and train a RandomNets model for your molecular property prediction tasks using the Pytorch Lightning compatible FpsDataModule and RandomNets model.
 
-I've put together a small tutorial in [this Notebook](https://github.com/EBjerrum/RandomNets/notebooks/training.ipynb)
+I've put together a small tutorial in [this Notebook](https://github.com/EBjerrum/RandomNets/blob/main/notebooks/training.ipynb)
 
 Refer to PyTorch lighning documentation for training and inference.
 

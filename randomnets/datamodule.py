@@ -17,15 +17,15 @@ class FpsDataset(Dataset):
     def __init__(
         self,
         data,
-        target_label="pXC50",
-        feature_label="fps",
-        sample_mask_label="sample_mask",
+        target_column="pXC50",
+        feature_column="fps",
+        sample_mask_column="sample_mask",
         invert_mask=False,
     ):
         self.data = data
-        self.target_label = target_label
-        self.features_label = feature_label
-        self.sample_mask_label = sample_mask_label
+        self.target_column = target_column
+        self.feature_column = feature_column
+        self.sample_mask_column = sample_mask_column
         self.invert_mask = invert_mask
         self._max_n = np.max(np.stack(self.data.sample_mask.values)) + 1
 
@@ -33,10 +33,10 @@ class FpsDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        fp1 = torch.tensor(self.data[self.features_label].iloc[idx], dtype=torch.float)
-        y1 = torch.tensor(self.data[self.target_label].iloc[idx], dtype=torch.float)
+        fp1 = torch.tensor(self.data[self.feature_column].iloc[idx], dtype=torch.float)
+        y1 = torch.tensor(self.data[self.target_column].iloc[idx], dtype=torch.float)
 
-        sample_mask = self.data[self.sample_mask_label].iloc[idx]
+        sample_mask = self.data[self.sample_mask_column].iloc[idx]
 
         full_set = set(range(self._max_n))
 
@@ -54,10 +54,12 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         batch_size,
         csv_file="SLC6A4_active_excape_export.csv",
         n_nns=25,
-        sample_mask_thr=0.5,
-        dedicated_val=False,
-        val_sample_size=1000,
+        sample_mask_thr=0.0,
+        dedicated_val=True,
+        val_sample_size=0.25,
         scikit_mol_transformer=MorganFingerprintTransformer(nBits=4096, radius=2),
+        smiles_column="SMILES",
+        target_column="pXC50",
     ):
         super().__init__()
         self.batch_size = batch_size
@@ -67,9 +69,10 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         self.dedicated_val = dedicated_val
         self.skmol_trf = scikit_mol_transformer
         self.val_sample_size = val_sample_size
-        self.target_label = "pXC50"
-        self.features_label = "fps"
-        self.sample_mask_label = "sample_mask"
+        self.target_column = target_column
+        self.smiles_column = smiles_column
+        self.features_column = "fps"
+        self.sample_mask_column = "sample_mask"
         self.num_worker = 4
 
         self.save_hyperparameters()
@@ -80,7 +83,7 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
         assert os.path.exists(self.csv_file), f"CSV file {self.csv_file} not found"
         self.data = pd.read_csv(self.csv_file)
 
-        PandasTools.AddMoleculeColumnToFrame(self.data, smilesCol="SMILES")
+        PandasTools.AddMoleculeColumnToFrame(self.data, smilesCol=self.smiles_column)
         mol_conv_errors = self.data.ROMol.isna().sum()
         if mol_conv_errors > 0:
             logger.warning(
@@ -89,16 +92,11 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             self.data = self.data[self.data.ROMol.notna()]
 
         fps = self.skmol_trf.transform(self.data.ROMol)
-        self.data[self.features_label] = [arr for arr in fps]
+        self.data[self.features_column] = [arr for arr in fps]
 
         # prepare model_mask, TODO: is there another way to prepare the mask? it preempts knowledge about the number in the ensemble, which is the models responsibility!
-        # self.data["sample_mask"] = [
-        #     np.random.random(self.n_nns) > self.sample_mask_thr
-        #     for i in range(len(self.data))
-        # ]
-
         # This is the indices of the ensemble ids to associate with each sample
-        self.data[self.sample_mask_label] = [
+        self.data[self.sample_mask_column] = [
             np.random.choice(
                 range(self.n_nns),
                 max(
@@ -116,19 +114,20 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
             self.data_train, self.data_val = train_test_split(
                 self.data_train, test_size=self.val_sample_size, random_state=0
             )
-            # self.data_val["sample_mask"] = [
-            #     np.random.random(self.n_nns) >= 0.0 for i in range(len(self.data_val))
-            # ]
         else:
-            # With sample mask reversal, we can get the cross_val loss
-            self.data_val = self.data_train.sample(self.val_sample_size, random_state=0)
+            # With sample mask reversal, we can get the pseudo cross_val loss
+            if isinstance(self.val_sample_size, float):
+                val_sample_size = int(self.val_sample_size * len(self.data_train))
+            else:
+                val_sample_size = self.val_sample_size
+            self.data_val = self.data_train.sample(val_sample_size, random_state=0)
 
     def train_dataloader(self, shuffle=True):
         dataset = FpsDataset(
             self.data_train,
-            feature_label=self.features_label,
-            target_label=self.target_label,
-            sample_mask_label=self.sample_mask_label,
+            feature_column=self.features_column,
+            target_column=self.target_column,
+            sample_mask_column=self.sample_mask_column,
         )
         return DataLoader(
             dataset,
@@ -147,9 +146,9 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
 
         dataset = FpsDataset(
             self.data_val,
-            feature_label=self.features_label,
-            target_label=self.target_label,
-            sample_mask_label=self.sample_mask_label,
+            feature_column=self.features_column,
+            target_column=self.target_column,
+            sample_mask_column=self.sample_mask_column,
             invert_mask=invert_mask,
         )
         return DataLoader(
@@ -163,9 +162,9 @@ class FpsDatamodule(pytorch_lightning.LightningDataModule):
     def test_dataloader(self):
         dataset = FpsDataset(
             self.data_test,
-            feature_label=self.features_label,
-            target_label=self.target_label,
-            sample_mask_label=self.sample_mask_label,
+            feature_column=self.features_column,
+            target_column=self.target_column,
+            sample_mask_column=self.sample_mask_column,
         )
         return DataLoader(
             dataset,

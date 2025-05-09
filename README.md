@@ -1,6 +1,8 @@
 # RandomNets: A Vectorized Approach to Implicit Ensemble Neural Networks
 
+<div align="center">
 <img src="https://raw.githubusercontent.com/EBjerrum/RandomNets/main/resources/RandomNets_HeroImg.jpg" width="500">
+</div>
                          
 RandomNets is an efficient, vectorized solution for creating and training implicit ensemble feed-forward neural networks, designed to enhance prediction robustness and performance. By introducing input feature masking, RandomNets generates diverse predictions within a single model architecture, making it an attractive alternative to standard feed-forward neural networks. The model is especially suited for molecular property prediction tasks and has demonstrated superior performance across a wide range of bioactivity datasets.
 

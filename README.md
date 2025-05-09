@@ -29,14 +29,15 @@ Refer to PyTorch lighning documentation for training and inference.
 
 If you use RandomNets in your work, please cite the associated preprint available on ChemRxiv:
 
-Bjerrum, E. J. (2024). RandomNets Improve Neural Network Regression Performance via Implicit Ensembling. ChemRxiv. https://doi.org/10.xxxx/chemrxiv.xxxxx (TODO Update)
+Bjerrum, E. J. (2024). RandomNets Improve Neural Network Regression Performance via Implicit Ensembling. ChemRxiv.
+[https://chemrxiv.org/engage/chemrxiv/article-details/67656cfa81d2151a02603f48](https://chemrxiv.org/engage/chemrxiv/article-details/67656cfa81d2151a02603f48)
 
-The full paper, including experimental results and detailed methodologies, can be accessed through the above link.
+The paper contains details on approach, implementation, testing and results from 133 bioactivity datasets.
 
 ## Contributing
 
 Contributions, bug reports, and suggestions are welcome! Please open an issue, or reach out (I'm googlable) or submit a pull request to improve the project.
-I recommend reaching out first to avoid duplication of work
+I recommend reaching out first to avoid duplication of work.
 
 ## License
 
